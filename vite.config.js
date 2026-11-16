@@ -33,4 +33,8 @@ export default defineConfig(({ mode }) => ({
   base: './',
   plugins: mode === 'single' ? [cspPlugin, viteSingleFile()] : [cspPlugin],
   build: { outDir: mode === 'single' ? 'dist-single' : 'dist' },
+  // In development, fetch the suite hand-off script from the live site so the
+  // Add to case / Open in Hexes buttons can be exercised locally. In production
+  // the page is served from jon.glass itself and the path is simply same-origin.
+  server: { proxy: { '/assets/suite': { target: 'https://jon.glass', changeOrigin: true } } },
 }));

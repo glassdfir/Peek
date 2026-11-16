@@ -5,6 +5,7 @@ import { analyze, richGeneration } from './analyze.js';
 import ParseWorker from './worker.js?worker&inline';
 import sampleUrl from '../test/corpus/t32.exe?url';
 import { VERSION } from './version.js';
+import { caseItems } from './suite.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const content = $('#content'), toc = $('#toc'), toast = $('#toast');
@@ -77,8 +78,10 @@ function load(name, bytes) {
   const finish = (res) => {
     if (load.token !== token) return; // a newer file replaced this one
     if (!res.ok) { showCrash(name, res.error); return; }
-    current = { name, size, pe: attachLookups(res.pe), analysis: res.analysis };
+    current = { name, size, pe: attachLookups(res.pe), analysis: res.analysis, bytes: bytes.byteLength ? bytes : null };
     $('#exportBtn').disabled = false;
+    $('#caseBtn').disabled = false;
+    $('#hexesBtn').disabled = !current.bytes;
     render();
   };
   const w = getWorker();
@@ -338,16 +341,67 @@ function watchToc(blocks) {
   blocks.forEach((b) => watchToc.obs.observe(b.el));
 }
 
-// ---------- wiring ----------
-$('h1').append(h('span', { class: 'ver', title: 'Peek version' }, 'v' + VERSION));
-$('#helpClose').addEventListener('click', () => $('#help').close());
-$('#fileInput').addEventListener('change', (e) => { if (e.target.files[0]) loadFile(e.target.files[0]); e.target.value = ''; });
-$('#sampleBtn').addEventListener('click', async () => {
+// ---------- suite hand-offs ----------
+// On jon.glass the tools pass data to each other through /assets/suite/handoff.js (same-origin
+// localStorage, nothing leaves the browser). The script is loaded only over http(s), so the
+// single-file copy opened from disk never tries to fetch it; the buttons stay hidden there.
+const suite = () => (window.Suite && window.Suite.available() ? window.Suite : null);
+function openVia(promise) {
+  // Open the tab first so popup blockers allow it, then point it at the hand-off URL.
+  const w = window.open('', '_blank');
+  promise.then((url) => { if (w) { w.opener = null; w.location.href = url; } else location.href = url; },
+    (e) => { if (w) w.close(); showToast(e.message); });
+}
+function sendToTessera() {
+  const S = suite();
+  if (!S || !current) return;
+  const { name, size, pe, analysis } = current;
+  openVia(S.send('peek', 'tessera', { kind: 'case', name: name.replace(/\.[^.]*$/, ''), data: JSON.stringify(caseItems({ name, size, pe, analysis })) }));
+}
+function sendToHexes() {
+  const S = suite();
+  if (!S || !current) return;
+  if (!current.bytes) return showToast('This file was too large to keep in memory for a hand-off. Open it in Hexes from disk.');
+  const ep = current.pe.entryPoint;
+  openVia(S.send('peek', 'hexes', { kind: 'bytes', name: current.name, data: current.bytes, meta: ep && ep.offset !== null ? { offset: ep.offset } : {} }));
+}
+async function loadSample() {
   $('#sampleBtn').disabled = true;
   try { const r = await fetch(sampleUrl); load('t32.exe', new Uint8Array(await r.arrayBuffer())); }
   catch (e) { showToast('Could not load the sample'); }
   finally { $('#sampleBtn').disabled = false; }
-});
+}
+function initSuite() {
+  const S = suite();
+  const q = new URLSearchParams(location.search);
+  if (S) {
+    $('#caseBtn').hidden = false;
+    $('#hexesBtn').hidden = false;
+    const from = q.get('from');
+    if (from) {
+      S.receive('peek', from, { maxBytes: 256 << 20 })
+        .then((h) => { if (h) { showToast(`Received ${fmtSize(h.bytes.length)} from ${h.fromName}`); load(h.name, h.bytes); } })
+        .catch((e) => showToast('Could not load the hand-off: ' + e.message));
+      return;
+    }
+  }
+  if (q.get('sample')) loadSample();
+}
+if (/^https?:$/.test(location.protocol)) {
+  const sc = document.createElement('script');
+  sc.src = '/assets/suite/handoff.js';
+  sc.onload = initSuite;
+  sc.onerror = initSuite; // not on jon.glass: no hand-offs, but ?sample=1 still works
+  document.head.append(sc);
+} else initSuite();
+
+// ---------- wiring ----------
+$('h1').append(h('span', { class: 'ver', title: 'Peek version' }, 'v' + VERSION));
+$('#helpClose').addEventListener('click', () => $('#help').close());
+$('#fileInput').addEventListener('change', (e) => { if (e.target.files[0]) loadFile(e.target.files[0]); e.target.value = ''; });
+$('#sampleBtn').addEventListener('click', loadSample);
+$('#caseBtn').addEventListener('click', sendToTessera);
+$('#hexesBtn').addEventListener('click', sendToHexes);
 $('#exportBtn').addEventListener('click', () => current && downloadJson());
 $('#helpBtn').addEventListener('click', () => $('#help').showModal());
 $('#themeBtn').addEventListener('click', () => {

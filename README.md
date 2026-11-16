@@ -63,6 +63,21 @@ The same parser runs under Node, which is handy for batch triage:
   not verified; use `signtool verify` or `Get-AuthenticodeSignature` for that.
 - **JSON** export of the whole parse plus findings.
 
+## On jon.glass: hand-offs to the other tools
+
+When served from jon.glass, Peek loads the suite's shared `/assets/suite/handoff.js`
+and gains two header buttons: **Add to case** sends the file to Tessera as an
+evidence item with its hashes, the hashes as indicators, and the high and
+medium findings as findings; **Open in Hexes** passes the bytes to the hex
+viewer, positioned at the entry point. Opened with `?from=<tool>`, Peek
+receives bytes from another tool the same way, and `?sample=1` loads the
+sample on start. Hand-offs never leave the browser (same-origin localStorage)
+and are unavailable in the single-file copy opened from disk.
+
+Deployment: `.github/workflows/pages.yml` tests, builds and publishes `dist/`
+to GitHub Pages on every push to `main`; with the custom domain on the user
+site it appears at `https://jon.glass/<repo name>/`.
+
 ## Design notes
 
 - `src/pe.js` is the parser: pure, bounds-checked, every directory parsed
