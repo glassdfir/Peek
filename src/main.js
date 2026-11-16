@@ -1,7 +1,7 @@
 // Peek UI. Pure DOM, no framework. The parser (pe.js) and triage (analyze.js)
 // never touch the DOM, so they are shared with the tests and the CLI.
 import { parsePE, toJSON, attachLookups, hex } from './pe.js';
-import { analyze } from './analyze.js';
+import { analyze, richGeneration } from './analyze.js';
 import ParseWorker from './worker.js?worker&inline';
 import sampleUrl from '../test/corpus/t32.exe?url';
 import { VERSION } from './version.js';
@@ -237,7 +237,7 @@ function render() {
       ['File version (fixed)', vi.fixed ? vi.fixed.fileVersion : null], ['Product version (fixed)', vi.fixed ? vi.fixed.productVersion : null], ['File type', vi.fixed ? vi.fixed.fileTypeName : null],
       ['Translations', vi.translations.length ? vi.translations.map((t) => `lang ${hex(t.lang, 4)} cp ${t.codePage}`).join(', ') : null],
     ])));
-    if (rs.manifest) cards.push(h('div', { class: 'card' }, h('h3', 'Manifest'), h('pre', { class: 'text' }, rs.manifest.trim())));
+    if (rs.manifest) cards.push(h('div', { class: 'card wide' }, h('h3', 'Manifest'), h('pre', { class: 'text' }, rs.manifest.trim())));
     if (cards.length) resSec.append(h('div', { class: 'cards', style: 'margin-bottom:12px' }, cards));
     resSec.append(h('div', { class: 'table-wrap' }, h('table', h('thead', h('tr', h('th', 'Type'), h('th', 'Name / ID'), h('th', 'Lang'), h('th', 'RVA'), h('th', 'Size'), h('th', 'Entropy'), h('th', 'Looks like'))),
       h('tbody', rs.items.slice(0, 2000).map((it) => h('tr', { class: it.magic === 'PE/DOS executable' ? 'bad' : it.entropy > 7.5 && it.size > 8192 && !/ICON|PNG|BITMAP/.test(it.type) ? 'warn' : '' },
@@ -248,13 +248,13 @@ function render() {
   // Debug & toolchain
   const dbg = sec('debug', 'Debug & toolchain');
   const dcards = [];
-  if (pe.debug.length) dcards.push(h('div', { class: 'card' }, h('h3', 'Debug directory'), h('table', h('thead', h('tr', h('th', 'Type'), h('th', 'Timestamp'), h('th', 'Details'))),
+  if (pe.debug.length) dcards.push(h('div', { class: 'card wide' }, h('h3', 'Debug directory'), h('div', { class: 'scroll' }, h('table', h('thead', h('tr', h('th', 'Type'), h('th', 'Timestamp'), h('th', 'Details'))),
     h('tbody', pe.debug.map((d) => h('tr', h('td', d.typeName), h('td', { class: 'mono' }, d.timestamp || hex(d.timeDateStamp)),
-      h('td', d.codeView ? [d.codeView.pdb ? mono(d.codeView.pdb) : null, d.codeView.guid ? h('div', { class: 'muted mono' }, `${d.codeView.guid} age ${d.codeView.age}`) : null] : d.repro ? mono(d.repro.hash) : d.pogo ? d.pogo.signature : d.cetCompat !== undefined ? (d.cetCompat ? 'CET compatible' : 'CET not set') : d.error ? h('span', { class: 'chip medium' }, d.error) : h('span', { class: 'muted' }, `${d.sizeOfData} bytes at ${hex(d.pointerToRawData)}`))))))));
+      h('td', { class: 'wrap' }, d.codeView ? [d.codeView.pdb ? mono(d.codeView.pdb) : null, d.codeView.guid ? h('div', { class: 'muted mono' }, `${d.codeView.guid} age ${d.codeView.age}`) : null] : d.repro ? mono(d.repro.hash) : d.pogo ? d.pogo.signature : d.cetCompat !== undefined ? (d.cetCompat ? 'CET compatible' : 'CET not set') : d.error ? h('span', { class: 'chip medium' }, d.error) : h('span', { class: 'muted' }, `${d.sizeOfData} bytes at ${hex(d.pointerToRawData)}`)))))))));
   else dcards.push(h('div', { class: 'card' }, h('h3', 'Debug directory'), h('p', { class: 'empty' }, 'None.')));
-  if (pe.rich) dcards.push(h('div', { class: 'card' }, h('h3', 'Rich header'), h('p', { style: 'margin:0 0 6px' }, pe.rich.valid ? chip('checksum valid', 'ok') : chip('checksum invalid: edited or forged', 'medium'), ' ', mono(`key ${hex(pe.rich.key, 8)}`), ' ', pe.rich.hash ? [mono(`hash ${pe.rich.hash}`)] : null),
-    h('table', h('thead', h('tr', h('th', 'Tool'), h('th', 'Product id'), h('th', 'Build'), h('th', 'Count'), h('th', 'Generation'))),
-      h('tbody', pe.rich.entries.map((e) => h('tr', h('td', { class: 'mono' }, e.name || h('span', { class: 'muted' }, 'unknown')), h('td', { class: 'mono' }, hex(e.productId, 4)), h('td', { class: 'num' }, e.build), h('td', { class: 'num' }, e.count), h('td', e.toolchain || '')))))));
+  if (pe.rich) dcards.push(h('div', { class: 'card wide' }, h('h3', 'Rich header'), h('p', { style: 'margin:0 0 6px' }, pe.rich.valid ? chip('checksum valid', 'ok') : chip('checksum invalid: edited or forged', 'medium'), ' ', mono(`key ${hex(pe.rich.key, 8)}`), ' ', pe.rich.hash ? [mono(`hash ${pe.rich.hash}`)] : null),
+    h('div', { class: 'scroll' }, h('table', h('thead', h('tr', h('th', 'Tool'), h('th', 'Product id'), h('th', { class: 'num' }, 'Build'), h('th', { class: 'num' }, 'Count'), h('th', 'Generation'))),
+      h('tbody', pe.rich.entries.map((e) => h('tr', h('td', { class: 'mono' }, e.name || h('span', { class: 'muted' }, 'unknown')), h('td', { class: 'mono' }, hex(e.productId, 4)), h('td', { class: 'num' }, e.build), h('td', { class: 'num' }, e.count), h('td', richGeneration(e) || ''))))))));
   else dcards.push(h('div', { class: 'card' }, h('h3', 'Rich header'), h('p', { class: 'empty' }, 'None (not linked with Microsoft link.exe, or stripped).')));
   if (pe.tls) dcards.push(h('div', { class: 'card' }, h('h3', 'TLS'), kv([['Raw data', `${numOrHex(pe.tls.startAddressOfRawData)} – ${numOrHex(pe.tls.endAddressOfRawData)}`], ['Index', numOrHex(pe.tls.addressOfIndex)], ['Callbacks', pe.tls.callbacks.length ? h('div', pe.tls.callbacks.map((c) => h('div', mono(`${hex(c.rva, 8)}`), ' in ', c.section || h('span', { class: 'chip medium' }, 'no section')))) : pe.tls.callbacksNote || 'none'], ['Zero fill', hx(pe.tls.sizeOfZeroFill)]])));
   if (pe.clr) dcards.push(h('div', { class: 'card' }, h('h3', '.NET (CLR) header'), kv([['Runtime', pe.clr.runtimeVersion || `${pe.clr.majorRuntimeVersion}.${pe.clr.minorRuntimeVersion}`], ['Flags', h('div', pe.clr.flagNames.map((f) => chip(f, 'flag')))], ['Entry token', hx(pe.clr.entryPointToken)], ['Metadata', `${hex(pe.clr.metaDataRva)} (${fmtSize(pe.clr.metaDataSize)}${pe.clr.streams ? `, ${pe.clr.streams} streams` : ''})`], ['Strong name', pe.clr.strongNameSize ? `${pe.clr.strongNameSize} bytes` : 'none']])));

@@ -329,21 +329,24 @@ export function guessCompiler(pe) {
   if (pe.optionalHeader && pe.optionalHeader.majorLinkerVersion === 2 && pe.optionalHeader.minorLinkerVersion >= 20) return 'GCC (ld 2.x)';
   return null;
 }
-function richToolchainLabel(entry) {
-  // Product id says which linker generation; build numbers only disambiguate inside VS 2015+ (all "Linker1400").
-  const m = (entry.name || '').match(/^Linker(\d+)p?$/);
-  if (!m) return entry.toolchain;
-  const gen = { '510': 'VS 5', '511': 'VS 5', '512': 'VS 5', '600': 'VS 6', '601': 'VS 6', '610': 'VS 6', '620': 'VS 6', '621': 'VS 6', '622': 'VS 6', '624': 'VS 6',
-    '700': 'VS .NET 2002', '710': 'VS .NET 2003', '800': 'VS 2005', '900': 'VS 2008', '1000': 'VS 2010', '1010': 'VS 2010 SP1', '1100': 'VS 2012',
-    '1200': 'VS 2013', '1210': 'VS 2013 Update' }[m[1]];
-  if (gen) return gen;
-  if (m[1] === '1400') {
-    const b = entry.build;
-    if (b < 24000) return 'VS 2015';
-    if (b < 25000) return 'VS 2015 Update';
-    if (b < 27000) return 'VS 2017';
-    if (b < 30000) return 'VS 2019';
-    return 'VS 2022';
+// Visual Studio generation for a Rich header entry. Two numbering schemes: linker-family tools
+// (Linker, Implib, Export, Cvtres, Masm, AliasObj, Cvtomf) count 800=VS2005 ... 1400=VS2015+, while
+// compiler-family tools (Utc, Phx, Cvtpgd) count 1400=VS2005 ... 1900=VS2015+. Inside the 2015+ bucket
+// only the build number tells 2015/2017/2019/2022 apart.
+export function richGeneration(entry) {
+  const name = entry.name || '';
+  const m = name.match(/^(Linker|Implib|Export|Cvtres|Masm|AliasObj|Cvtomf|Utc|Phx|Cvtpgd)(\d{3,4})/);
+  if (!m) return entry.toolchain || null;
+  const linkerFamily = !/^(Utc|Phx|Cvtpgd)$/.test(m[1]);
+  const v = m[2];
+  const byBuild = (b) => (b < 24000 ? 'VS 2015' : b < 25000 ? 'VS 2015 Update' : b < 27000 ? 'VS 2017' : b < 30000 ? 'VS 2019' : 'VS 2022');
+  if (linkerFamily) {
+    const gen = { '510': 'VS 5', '511': 'VS 5', '512': 'VS 5', '600': 'VS 6', '601': 'VS 6', '610': 'VS 6', '613': 'VS 6', '614': 'VS 6', '615': 'VS 6', '620': 'VS 6', '621': 'VS 6', '622': 'VS 6', '624': 'VS 6',
+      '700': 'VS .NET 2002', '710': 'VS .NET 2003', '800': 'VS 2005', '900': 'VS 2008', '1000': 'VS 2010', '1010': 'VS 2010 SP1', '1100': 'VS 2012', '1200': 'VS 2013', '1210': 'VS 2013 Update' }[v];
+    return gen || (v === '1400' ? byBuild(entry.build) : entry.toolchain || null);
   }
-  return entry.toolchain || `link ${m[1]}`;
+  const gen = { '11': 'VS 5', '12': 'VS 6', '13': 'VS .NET 2002', '1310': 'VS .NET 2003', '1400': 'VS 2005', '1500': 'VS 2008', '1600': 'VS 2010', '1610': 'VS 2010 SP1',
+    '1700': 'VS 2012', '1800': 'VS 2013', '1810': 'VS 2013 Update' }[v];
+  return gen || (v === '1900' ? byBuild(entry.build) : entry.toolchain || null);
 }
+function richToolchainLabel(entry) { return richGeneration(entry); }

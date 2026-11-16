@@ -86,7 +86,11 @@ section.block { margin-bottom: 28px; scroll-margin-top: 12px; }
 section.block > h2 { font-size: 15px; margin: 0 0 10px; padding-bottom: 6px; border-bottom: 1px solid var(--border); display: flex; align-items: baseline; gap: 10px; }
 section.block > h2 .sub { font-weight: 400; color: var(--text-3); font-size: 12.5px; }
 .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
-.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; }
+.cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 12px; }
+/* cards that hold a table get two columns so rows do not fold */
+.card.wide { grid-column: span 2; }
+@media (max-width: 700px) { .card.wide { grid-column: auto; } }
+.card .scroll { overflow-x: auto; }
 .card h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.6px; color: var(--text-3); }
 .empty { color: var(--text-3); font-style: italic; }
 .muted { color: var(--text-3); }
@@ -130,7 +134,8 @@ th { color: var(--text-3); font-weight: 600; font-size: 12px; position: sticky; 
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 td.mono { font-family: var(--mono); font-size: 12.5px; white-space: nowrap; }
 .card table { table-layout: auto; }
-.card td, .card td.mono { white-space: normal; overflow-wrap: anywhere; }
+.card td { white-space: nowrap; }
+.card td.wrap, .card td.wrap.mono { white-space: normal; overflow-wrap: anywhere; min-width: 240px; }
 .card code { overflow-wrap: anywhere; }
 tr.warn td { background: color-mix(in srgb, var(--sev-med-bg) 55%, transparent); }
 tr.bad td { background: color-mix(in srgb, var(--sev-high-bg) 55%, transparent); }
