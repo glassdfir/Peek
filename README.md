@@ -107,3 +107,7 @@ Corpus (see `test/corpus/NOTICE.md` for provenance and licences):
   files that are not PEs at all, and pefile rejects those too.
 
 `node test/fuzz.mjs 20000` runs a long mutation-fuzz pass over the corpus.
+
+## Licence
+
+MIT. Test corpus files carry their own licences; see `test/corpus/NOTICE.md`.
