@@ -1,0 +1,18 @@
+{
+  "name": "peek",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run build:single && vite build && cp dist-single/peek.html dist/peek.html",
+    "build:single": "vite build --mode single && mv dist-single/index.html dist-single/peek.html",
+    "preview": "vite preview",
+    "test": "node --test test/*.test.mjs",
+    "cli": "node bin/peek.mjs"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0",
+    "vite-plugin-singlefile": "^2.3.4"
+  }
+}

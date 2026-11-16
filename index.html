@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Peek</title>
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='4' y='6' width='24' height='20' rx='3' fill='none' stroke='%237aa7ff' stroke-width='2.5'/%3E%3Cpath d='M4 12h24' stroke='%237aa7ff' stroke-width='2.5'/%3E%3Ccircle cx='16' cy='19' r='3.5' fill='%237aa7ff'/%3E%3C/svg%3E" />
+  <script>
+    try {
+      const t = localStorage.getItem('peek-theme');
+      if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+    } catch (e) {}
+  </script>
+  <link rel="stylesheet" href="/src/styles.css" />
+</head>
+<body>
+  <header>
+    <h1><span class="logo" aria-hidden="true">◉</span>Peek</h1>
+    <span class="note">PE header viewer. Runs entirely in your browser; the file never leaves this machine and is never executed.</span>
+    <label class="header-btn" for="fileInput">Open file…</label>
+    <input type="file" id="fileInput" />
+    <button type="button" id="sampleBtn" class="header-btn" title="Load a small, harmless Windows launcher as a demo">Sample</button>
+    <button type="button" id="exportBtn" class="header-btn" disabled title="Download the full parse as JSON">⤓ JSON</button>
+    <button type="button" id="themeBtn" class="header-btn" title="Toggle light / dark">◐</button>
+    <button type="button" id="helpBtn" class="header-btn" title="Help (?)">?</button>
+  </header>
+  <main>
+    <nav id="toc" hidden></nav>
+    <div id="content">
+      <div id="drop">
+        <h2>Drop a Windows executable here</h2>
+        <p>EXE, DLL, SYS, OCX, CPL, SCR, EFI, or anything else with a PE header. Or use <b>Open file…</b> above.</p>
+        <p class="muted">Nothing is uploaded or run. Parsing is read-only and tolerant of damaged headers.</p>
+        <div class="what">
+          <b>What you get:</b>
+          <ul>
+            <li>SHA-256 / SHA-1 / MD5, imphash and Rich-header hash, ready to copy into a ticket or a search</li>
+            <li>Headers, data directories, sections with entropy, imports (incl. delay-load), exports, resources, version info, manifest</li>
+            <li>Debug/PDB path, Rich header toolchain, TLS callbacks, .NET header, load config, Authenticode presence, overlay</li>
+            <li>Triage findings: packer names, W+X sections, odd entry points, timestomping, injection-style imports and more</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </main>
+  <dialog id="help">
+    <h2>Peek</h2>
+    <p>A read-only Portable Executable viewer for triage. Everything is parsed in the page with no server and no network.</p>
+    <ul>
+      <li><b>Findings</b> are observations, not verdicts. Many legitimate installers, games and runtimes trip the packer and overlay checks; many malware samples trip none. Use them to decide where to look next.</li>
+      <li><b>Signature</b> shows only that an Authenticode blob is present and which names appear in it. The chain and the file hash are not verified here. Use <code>signtool verify</code> or <code>Get-AuthenticodeSignature</code> for that.</li>
+      <li><b>imphash</b> follows pefile's algorithm (lowercase, extension stripped, ordinals resolved for oleaut32, ws2_32 and wsock32 from pefile's own tables), so it is comparable with VirusTotal and most sandboxes.</li>
+      <li><b>Rich hash</b> is the MD5 of the decoded Rich header, as pefile computes it.</li>
+      <li><b>Entropy</b> is Shannon entropy in bits per byte. Plain code is usually 5.5–6.8; above ~7.2 means compressed or encrypted.</li>
+      <li><b>JSON export</b> contains the full parse plus findings, for reports or for feeding other tools.</li>
+    </ul>
+    <p>Shortcuts: <kbd>?</kbd> help, <kbd>o</kbd> open file, <kbd>Esc</kbd> close.</p>
+    <p><button type="button" id="helpClose" class="copy">Close</button></p>
+  </dialog>
+  <div id="toast" class="toast" role="status"></div>
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
