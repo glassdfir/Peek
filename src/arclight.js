@@ -1,6 +1,6 @@
-// Case 01's "update.exe" (jon.glass/cases/kestrel/): fake and safe, not a program.
-// Copied verbatim from Hexes (glassdfir/hexes, buildKestrel) so both tools open the same
-// bytes. The case's logs pin this file's SHA-256 and size, and test/kestrel.test.mjs
+// Case 01's "update.exe" (jon.glass/cases/arclight/): fake and safe, not a program.
+// Copied verbatim from Hexes (glassdfir/hexes, buildArclight) so both tools open the same
+// bytes. The case's logs pin this file's SHA-256 and size, and test/arclight.test.mjs
 // fails if this copy ever drifts from them. If Hexes' generator changes, copy it again.
 function crc32(u8) {
   let c, crc = 0xffffffff;
@@ -11,7 +11,7 @@ function crc32(u8) {
   }
   return (crc ^ 0xffffffff) >>> 0;
 }
-export function buildKestrel() {
+export function buildArclight() {
   let seed = 0x1013;
   const rnd = () => ((seed = (Math.imul(seed, 1103515245) + 12345) >>> 0) >>> 24);
   const enc = t => Uint8Array.from(t, c => c.charCodeAt(0) & 255);
@@ -33,22 +33,22 @@ export function buildKestrel() {
 
   // .text: honest about what this is, then filler that looks like code padding
   const text = new Uint8Array(0x2000);
-  text.set(enc('Kestrel Freight case evidence for jon.glass/cases/kestrel. Fake and safe: this is not a program.\0'), 0);
+  text.set(enc('Arclight Industries case evidence for jon.glass/cases/arclight. Fake and safe: this is not a program.\0'), 0);
   const ops = [0x48, 0x89, 0x8b, 0xe8, 0xff, 0x0f, 0x85, 0x84, 0xc3, 0x90, 0x83, 0xc4, 0x8d, 0x4c, 0x24, 0x00]; // common x64 bytes
   for (let i = 0x80; i < text.length; i++) text[i] = i % 32 < 28 ? ops[rnd() & 15] : 0xcc;
   parts.push(text);
 
   // .rdata: plain strings, then UTF-16 ones
   parts.push(enc([
-    'Global\\kf-1013-mtx', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36',
-    '/api/v2/sync', 'POST', 'application/octet-stream', '%APPDATA%\\Microsoft\\Teams\\update.exe', 'TeamsUpdater', 'KFUpdSvc',
+    'Global\\tf-1013-mtx', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36',
+    '/api/v2/sync', 'POST', 'application/octet-stream', '%APPDATA%\\Microsoft\\Teams\\update.exe', 'TeamsUpdater', 'ArcUpdSvc',
   ].join('\0') + '\0\0\0\0'));
-  [ 'C:\\ProgramData\\d.bin', 'comsvcs.dll, MiniDump', 'C:\\Windows\\Temp\\kfupd.exe', '\\\\FILE-01\\ADMIN$' ]
+  [ 'C:\\ProgramData\\d.bin', 'comsvcs.dll, MiniDump', 'C:\\Windows\\Temp\\arcupd.exe', '\\\\FILE-01\\ADMIN$' ]
     .forEach(t => parts.push(wide(t), new Uint8Array(4)));
   parts.push(new Uint8Array(0x600));
 
   // .data: the config XOR-ed with 0x37, a FILETIME kill date, and the persistence command as Base64 UTF-16
-  const cfg = 'c2=203.0.113.66:443;path=/api/v2/sync;sleep=60;jitter=20;task=TeamsUpdater;svc=KFUpdSvc;campaign=KF-1013;exfil=https://198.51.100.77/upload';
+  const cfg = 'c2=203.0.113.66:443;path=/api/v2/sync;sleep=60;jitter=20;task=TeamsUpdater;svc=ArcUpdSvc;campaign=TF-1013;exfil=https://198.51.100.77/upload';
   parts.push(enc('cfg1:'), enc(cfg).map(x => x ^ 0x37), new Uint8Array(3));
   const kd = new Uint8Array(8); new DataView(kd.buffer).setBigUint64(0, ft(Date.UTC(2026, 10, 13)), true);
   parts.push(enc('kd:'), kd, new Uint8Array(5));
@@ -56,7 +56,7 @@ export function buildKestrel() {
   parts.push(new Uint8Array(0x800));
 
   // .rsrc: a real, stored ZIP holding the exfil tool's config. Carve it and it opens.
-  const name = enc('rclone.conf'), body = enc('[kf]\ntype = webdav\nurl = https://198.51.100.77/upload\nvendor = other\nuser = kf1013\n');
+  const name = enc('rclone.conf'), body = enc('[tf]\ntype = webdav\nurl = https://198.51.100.77/upload\nvendor = other\nuser = tf1013\n');
   const crc = crc32(body), when = [0x8a, 0x6c, 0x4d, 0x5d]; // DOS time 13:36:20, date 2026-10-13
   const lh = new Uint8Array(30), lv = new DataView(lh.buffer);
   lv.setUint32(0, 0x04034b50, true); lv.setUint16(4, 20, true); lh.set(when, 10);
