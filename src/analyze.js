@@ -96,6 +96,9 @@ export function analyze(pe, opts = {}) {
   const want64 = [0x8664, 0xaa64, 0x200, 0xa641, 0xa64e, 0x5064, 0x6264].includes(fh.machine);
   if (oh.is64 !== want64 && fh.machine !== 0) add('medium', 'Machine type does not match PE32/PE32+ format', `${fh.machineName} with a ${oh.format} optional header.`);
   if (fh.numberOfSections === 0) add('high', 'No sections', 'An image with no sections cannot run normally.');
+  const empty = pe.sections.filter((s) => !s.virtualSize && !s.sizeOfRawData);
+  if (pe.sections.length && empty.length === pe.sections.length) add('high', 'Every section is empty', `The section table names ${pe.sections.map((s) => s.displayName).join(', ')} but gives none of them a size. Nothing in this file is mapped as code or data: the header is a shell around raw bytes.`);
+  else for (const s of empty) add('low', `Section ${s.displayName} is empty`, 'No virtual size and no raw data.', s.displayName);
   if (fh.numberOfSections > 20) add('low', 'Many sections', `${fh.numberOfSections} sections is unusual for a compiler-built image.`);
   if (oh.sizeOfHeaders === 0 || oh.sizeOfHeaders > 0x10000) add('medium', 'Odd SizeOfHeaders', hex(oh.sizeOfHeaders));
   const first = pe.sections.find((s) => s.sizeOfRawData);

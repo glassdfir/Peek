@@ -6,6 +6,7 @@ import ParseWorker from './worker.js?worker&inline';
 import sampleUrl from '../test/corpus/t32.exe?url';
 import { VERSION } from './version.js';
 import { caseItems } from './suite.js';
+import { buildKestrel } from './kestrel.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const content = $('#content'), toc = $('#toc'), toast = $('#toast');
@@ -302,6 +303,9 @@ function render() {
   }));
   content.scrollTop = 0;
   watchToc(blocks);
+  // #imports, #findings, ... in the URL jumps to that section once the report exists
+  const target = location.hash.length > 1 && document.getElementById(decodeURIComponent(location.hash.slice(1)));
+  if (target && content.contains(target)) target.scrollIntoView({ block: 'start' });
 }
 
 function drawImports(list, dlls, q) {
@@ -385,7 +389,20 @@ function initSuite() {
       return;
     }
   }
-  if (q.get('sample')) loadSample();
+  const sample = q.get('sample'), src = q.get('src');
+  if (sample === 'kestrel') load('update.exe', buildKestrel()); // Case 01's implant, generated here like Hexes does
+  else if (sample) loadSample();
+  else if (src) loadSrc(src);
+}
+// ?src=/path/to/file opens a file from this site, like Tessera's ?src=. Same-origin paths only;
+// the production CSP (connect-src 'self') enforces that too.
+async function loadSrc(src) {
+  if (!/^\/(?!\/)/.test(src)) return showToast('?src= takes a path on this site, starting with /');
+  try {
+    const r = await fetch(src);
+    if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+    load(decodeURIComponent(src.split('/').pop()) || 'file', new Uint8Array(await r.arrayBuffer()));
+  } catch (e) { showToast('Could not open ' + src + ': ' + e.message); }
 }
 if (/^https?:$/.test(location.protocol)) {
   const sc = document.createElement('script');

@@ -186,3 +186,18 @@ test('version info parser handles a hand-built block', () => {
   assert.equal(v.strings.ProductName, 'Peek');
   assert.equal(v.fixed.fileVersion, '2.0.3.0');
 });
+
+test('empty sections are flagged, individually and when all are empty', () => {
+  const b = new Uint8Array(readFileSync(new URL('./corpus/t32.exe', import.meta.url)));
+  const dv = new DataView(b.buffer);
+  const nt = dv.getUint32(0x3c, true);
+  const sec0 = nt + 24 + dv.getUint16(nt + 20, true);
+  dv.setUint32(sec0 + 2 * 40 + 8, 0, true); dv.setUint32(sec0 + 2 * 40 + 16, 0, true); // .data: no sizes
+  const one = analyze(parsePE(b), { fileName: 't32.exe' }).findings.map((f) => f.title);
+  assert.ok(one.includes('Section .data is empty'));
+  assert.ok(!one.includes('Every section is empty'));
+  for (let i = 0; i < 5; i++) { dv.setUint32(sec0 + i * 40 + 8, 0, true); dv.setUint32(sec0 + i * 40 + 16, 0, true); }
+  const all = analyze(parsePE(b), { fileName: 't32.exe' }).findings.map((f) => f.title);
+  assert.ok(all.includes('Every section is empty'));
+});
+
