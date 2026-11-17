@@ -300,7 +300,12 @@ function parseImage(r, pe, bytes, nt, opts, warn, safe) {
   // -- Overlay (data after the last section; the Authenticode blob lives here)
   // Overlay starts after the last section's raw data, but never inside the headers themselves (tiny PEs claim SizeOfHeaders = 0).
   const headerBytes = Math.max(sizeOfHeaders, pe.sectionTableOffset + pe.sections.length * 40, nt + 24);
-  const lastEnd = pe.sections.reduce((m, s) => Math.max(m, s.sizeOfRawData ? s.rawOffset + s.sizeOfRawData : 0), headerBytes);
+  let lastEnd = pe.sections.reduce((m, s) => Math.max(m, s.sizeOfRawData ? s.rawOffset + s.sizeOfRawData : 0), headerBytes);
+  // Low-alignment images (SectionAlignment == FileAlignment < a page) are mapped flat, with SizeOfImage
+  // rounded up to a whole page, so nothing inside that extent is overlay (corkami's tiny PEs rely on this).
+  const ohx = pe.optionalHeader;
+  if (ohx && ohx.sectionAlignment && ohx.sectionAlignment < 0x1000 && ohx.sectionAlignment === ohx.fileAlignment)
+    lastEnd = Math.max(lastEnd, alignUp(ohx.sizeOfImage, 0x1000));
   if (bytes.length > lastEnd) {
     const certStart = pe.certificates ? pe.certificates.offset : null;
     const ov = { offset: lastEnd, size: bytes.length - lastEnd };

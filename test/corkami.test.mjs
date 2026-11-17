@@ -41,6 +41,9 @@ test('tiny PEs with overlapping headers are accepted and flagged', () => {
   const a = analyze(pe, { fileName: 'tinyW7.exe' });
   assert.ok(a.findings.some((f) => f.title === 'Entry point is inside the headers'));
   assert.ok(a.findings.some((f) => f.title === 'No sections'));
+  // low-alignment mode maps the whole file flat: none of it is overlay
+  assert.equal(pe.overlay, null);
+  assert.ok(!a.findings.some((f) => /^Overlay/.test(f.title)));
 });
 
 test('zero SizeOfOptionalHeader still yields an optional header and a section table', () => {
