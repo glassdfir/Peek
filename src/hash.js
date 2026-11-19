@@ -56,6 +56,11 @@ export function md5(bytes) {
 }
 
 export function sha1(bytes) {
+  return Array.from(sha1Bytes(bytes), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+// Raw 20-byte SHA-1 digest, for HMAC/PBKDF2 in the ZIP reader (WinZip AES).
+export function sha1Bytes(bytes) {
   let h0 = 0x67452301, h1 = 0xefcdab89, h2 = 0x98badcfe, h3 = 0x10325476, h4 = 0xc3d2e1f0;
   const W = new Uint32Array(80);
   blocks(bytes, false, (b, off) => {
@@ -73,7 +78,9 @@ export function sha1(bytes) {
     }
     h0 = (h0 + a) >>> 0; h1 = (h1 + b2) >>> 0; h2 = (h2 + c) >>> 0; h3 = (h3 + d) >>> 0; h4 = (h4 + e) >>> 0;
   });
-  return hex8(h0) + hex8(h1) + hex8(h2) + hex8(h3) + hex8(h4);
+  const out = new Uint8Array(20), dv = new DataView(out.buffer);
+  [h0, h1, h2, h3, h4].forEach((v, i) => dv.setUint32(i * 4, v, false));
+  return out;
 }
 
 const SHA256_K = new Uint32Array([

@@ -9,7 +9,7 @@ const src = (f) => readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
 test('UI never renders file-derived strings as HTML', () => {
   // Manifest text, version strings, PDB paths and import names are attacker-controlled.
   // Everything must go through text nodes; none of these sinks may appear in the UI code.
-  for (const f of ['src/main.js', 'src/worker.js']) {
+  for (const f of ['src/main.js', 'src/worker.js', 'src/zip.js']) {
     const code = src(f);
     for (const sink of ['innerHTML', 'outerHTML', 'insertAdjacentHTML', 'document.write', 'srcdoc', 'eval(', 'new Function']) {
       assert.ok(!code.includes(sink), `${f} uses ${sink}`);

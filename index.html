@@ -32,6 +32,7 @@
       <div id="drop">
         <h2>Drop a Windows executable here</h2>
         <p>EXE, DLL, SYS, OCX, CPL, SCR, EFI, or anything else with a PE header. Or use <b>Open file…</b> above.</p>
+        <p>A <b>ZIP</b> works too: samples zipped with the password <code>infected</code> (MalwareBazaar, VirusTotal, vx-underground) open straight away, ZipCrypto or AES. Other passwords are asked for.</p>
         <p class="muted">Nothing is uploaded or run. Parsing is read-only and tolerant of damaged headers.</p>
         <div class="what">
           <b>What you get:</b>
@@ -54,10 +55,20 @@
       <li><b>imphash</b> follows pefile's algorithm (lowercase, extension stripped, ordinals resolved for oleaut32, ws2_32 and wsock32 from pefile's own tables), so it is comparable with VirusTotal and most sandboxes.</li>
       <li><b>Rich hash</b> is the MD5 of the decoded Rich header, as pefile computes it.</li>
       <li><b>Entropy</b> is Shannon entropy in bits per byte. Plain code is usually 5.5–6.8; above ~7.2 means compressed or encrypted.</li>
+      <li><b>ZIP archives</b> are unpacked in the page, never written to disk or run. Peek tries the password <code>infected</code>, then asks. ZipCrypto and AES (7-Zip, WinZip) with stored or deflate entries are supported, up to 256 MB unpacked; CRCs and AES authentication codes are checked. With several executables inside you pick one. Hashes, findings, JSON and hand-offs are for the extracted file; the summary says which archive it came from.</li>
       <li><b>JSON export</b> contains the full parse plus findings, for reports or for feeding other tools.</li>
     </ul>
     <p>Shortcuts: <kbd>?</kbd> help, <kbd>o</kbd> open file, <kbd>Esc</kbd> close.</p>
     <p><button type="button" id="helpClose" class="copy">Close</button></p>
+  </dialog>
+  <dialog id="zipPw">
+    <form method="dialog">
+      <h2>Password for <span id="zipPwName"></span></h2>
+      <p id="zipPwMsg"></p>
+      <p><input id="zipPwInput" type="text" autocomplete="off" spellcheck="false" autocapitalize="off" placeholder="password" aria-label="ZIP password" /></p>
+      <p class="muted">Checked in this page only. Nothing is extracted until it matches.</p>
+      <p class="dialog-buttons"><button type="button" class="copy" id="zipPwCancel">Cancel</button> <button type="submit" value="ok" class="copy" id="zipPwOk">Open</button></p>
+    </form>
   </dialog>
   <div id="toast" class="toast" role="status"></div>
   <script type="module" src="/src/main.js"></script>
