@@ -6,7 +6,7 @@ import ParseWorker from './worker.js?worker&inline';
 import sampleUrl from '../test/corpus/t32.exe?url';
 import { VERSION } from './version.js';
 import { caseItems } from './suite.js';
-import { buildKestrel } from './kestrel.js';
+import { buildArclight } from './arclight.js';
 import { isZip, readZip, findPassword, checkPassword, classifyEntries, extractEntry, baseName, ZipError } from './zip.js';
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -488,7 +488,7 @@ function initSuite() {
     }
   }
   const sample = q.get('sample'), src = q.get('src');
-  if (sample === 'kestrel') load('update.exe', buildKestrel()); // Case 01's implant, generated here like Hexes does
+  if (sample === 'arclight' || sample === 'kestrel') load('update.exe', buildArclight()); // Case 01's implant, generated here like Hexes does
   else if (sample) loadSample();
   else if (src) loadSrc(src);
 }
