@@ -7,6 +7,12 @@ Drop in an EXE, DLL, SYS or any other Windows image and get headers, sections,
 imports, exports, resources, debug info, signature presence, hashes and a list
 of triage findings. Nothing is uploaded, nothing is executed.
 
+It also opens **password-protected ZIPs**, the way samples are shared on
+MalwareBazaar, VirusTotal and vx-underground: drop the zip and Peek tries the
+password `infected`, asks for another if that fails, and analyzes the
+executable inside as if it had been dropped directly. See
+[ZIP archives](#zip-archives).
+
 ## Run locally
     npm install
     npm run dev
@@ -63,6 +69,30 @@ The same parser runs under Node, which is handy for batch triage:
   not verified; use `signtool verify` or `Get-AuthenticodeSignature` for that.
 - **JSON** export of the whole parse plus findings.
 
+## ZIP archives
+
+- Supported: ZipCrypto (the legacy encryption most malware zips use) and WinZip
+  AES-128/192/256 (AE-1 and AE-2, as 7-Zip writes them); stored and deflate
+  entries; unencrypted zips; ZIP64 records.
+- Password: `infected` is tried first, then Peek asks. The password is checked
+  in the page only.
+- One executable inside opens straight away. With several, Peek lists them
+  (name, size, encryption, whether it has an MZ/PE header) and you pick one;
+  non-executables can be opened anyway.
+- The extracted bytes are kept in memory and handed to the parser. They are
+  never written to disk and never run. Hashes, findings, JSON export, **Open in
+  Hexes** and **Add to case** all use the extracted file; the summary, the JSON
+  (`extractedFrom`) and the Tessera evidence note name the archive and entry.
+- The archive is treated as hostile (`src/zip.js`): bounds-checked headers,
+  at most 4096 entries, 256 MB unpacked per file, and output stops at the size
+  the central directory declares, so a zip bomb is refused rather than
+  unpacked. Truncated archives, damaged headers, wrong passwords, CRC
+  mismatches and failed AES authentication each get their own message.
+- Not supported: bzip2/LZMA/deflate64/zstd entries, PKWARE strong encryption,
+  split archives. Re-pack with 7-Zip using deflate.
+- Inflate, AES, PBKDF2 and HMAC are pure JS, like the hashes, so the
+  single-file copy opened from disk handles zips too.
+
 ## On jon.glass: hand-offs to the other tools
 
 When served from jon.glass, Peek loads the suite's shared `/assets/suite/handoff.js`
@@ -86,6 +116,9 @@ site it appears at `https://jon.glass/<repo name>/`.
   purpose; the viewer must survive that and say what it saw.
 - `src/analyze.js` turns a parse into findings and a summary. Tune the packer
   section list and notable API groups there.
+- `src/zip.js` is the ZIP reader (ZipCrypto, WinZip AES, inflate). Its
+  tests (`test/zip.test.mjs`) build every archive on the fly with
+  `test/zipfixture.mjs`; no archive is committed.
 - `src/hash.js` is pure-JS MD5/SHA-1/SHA-256 so the same code runs in the
   single-file build, Node tests and CLI without WebCrypto.
 - In the browser, parsing and hashing run in a Web Worker (`src/worker.js`,

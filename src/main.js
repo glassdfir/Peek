@@ -7,6 +7,7 @@ import sampleUrl from '../test/corpus/t32.exe?url';
 import { VERSION } from './version.js';
 import { caseItems } from './suite.js';
 import { buildArclight } from './arclight.js';
+import { isZip, readZip, findPassword, checkPassword, classifyEntries, extractEntry, baseName, ZipError } from './zip.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const content = $('#content'), toc = $('#toc'), toast = $('#toast');
@@ -49,7 +50,12 @@ const copyBtn = (text) => h('button', { type: 'button', class: 'copy', onclick: 
 // ---------- loading ----------
 async function loadFile(file) {
   const bytes = new Uint8Array(await file.arrayBuffer());
-  load(file.name, bytes);
+  openBytes(file.name, bytes);
+}
+// Every way in (drop, Open file, ?src=, a hand-off) goes through here so a ZIP is unpacked first.
+function openBytes(name, bytes) {
+  if (isZip(bytes)) openZip(name, bytes);
+  else load(name, bytes);
 }
 // Parsing runs in a Web Worker so hashing a large installer does not freeze the page.
 // If the worker cannot start (some file:// setups, odd CSP), fall back to the main thread.
@@ -69,7 +75,7 @@ function parseOnMainThread(name, bytes) {
     return { ok: true, pe: toJSON(pe), analysis: analyze(pe, { fileName: name }) };
   } catch (e) { return { ok: false, error: e && e.stack || String(e) }; }
 }
-function load(name, bytes) {
+function load(name, bytes, origin = null) {
   const size = bytes.byteLength;
   const status = h('p', { class: 'status' }, `Parsing ${name} (${fmtSize(size)})…`);
   content.replaceChildren(status);
@@ -79,7 +85,7 @@ function load(name, bytes) {
   const finish = (res) => {
     if (load.token !== token) return; // a newer file replaced this one
     if (!res.ok) { showCrash(name, res.error); return; }
-    current = { name, size, pe: attachLookups(res.pe), analysis: res.analysis, bytes: bytes.byteLength ? bytes : null };
+    current = { name, size, pe: attachLookups(res.pe), analysis: res.analysis, bytes: bytes.byteLength ? bytes : null, origin };
     $('#exportBtn').disabled = false;
     $('#caseBtn').disabled = false;
     $('#hexesBtn').disabled = !current.bytes;
@@ -101,6 +107,94 @@ function load(name, bytes) {
   w.postMessage({ name, buffer: bytes.buffer }, transfer ? [bytes.buffer] : []);
 }
 
+// ---------- ZIP archives ----------
+// Malware is shared as ZIPs locked with "infected". Peek opens them in the page (src/zip.js):
+// try "infected", else ask; one executable opens straight away, several get a picker.
+// The extracted bytes are only ever handed to the parser, exactly as if dropped directly.
+const tick = () => new Promise((r) => setTimeout(r, 20));
+const ZIP_TITLES = { 'not-zip': 'Not a ZIP archive', truncated: 'The ZIP is truncated', corrupt: 'The ZIP is damaged', 'too-big': 'Too large to extract', crc: 'Integrity check failed', unsupported: 'Cannot open this ZIP', 'bad-password': 'Wrong password', 'need-password': 'Password needed' };
+function busy(text) {
+  content.replaceChildren(h('p', { class: 'status' }, text));
+  toc.hidden = true;
+  $('#exportBtn').disabled = true; $('#caseBtn').disabled = true; $('#hexesBtn').disabled = true;
+}
+function zipProblem(zipName, err, actions = []) {
+  if (!(err instanceof ZipError)) { showCrash(zipName, err && err.stack || err); return; }
+  content.replaceChildren(h('section', { class: 'block' }, h('h2', zipName, h('span', { class: 'sub' }, 'ZIP archive')),
+    h('div', { class: 'card zip-problem' }, h('h3', ZIP_TITLES[err.code] || 'Cannot open this ZIP'), h('p', err.message),
+      h('p', { class: 'muted' }, 'Nothing was extracted or run.'), actions.length ? h('p', actions) : null)));
+}
+function askPassword(zipName, message) {
+  const dlg = $('#zipPw'), input = $('#zipPwInput');
+  $('#zipPwName').textContent = zipName;
+  $('#zipPwMsg').textContent = message;
+  input.value = '';
+  dlg.returnValue = '';
+  dlg.showModal();
+  input.focus();
+  return new Promise((resolve) => dlg.addEventListener('close', () => resolve(dlg.returnValue === 'ok' ? input.value : null), { once: true }));
+}
+async function openZip(zipName, bytes) {
+  load.token = {}; // a parse still running for an earlier file must not replace this view
+  busy(`Opening ${zipName} (${fmtSize(bytes.length)})…`);
+  await tick();
+  let files, password;
+  try {
+    files = readZip(bytes).entries.filter((e) => !e.dir);
+    if (!files.length) throw new ZipError('corrupt', 'The archive contains no files.');
+    password = findPassword(bytes, files);
+  } catch (e) { return zipProblem(zipName, e); }
+  const locked = files.find((e) => e.encrypted);
+  let prompt = `Not "infected". Enter the password for this archive (${locked && locked.encryption}).`;
+  while (password === null) {
+    const pw = await askPassword(zipName, prompt);
+    if (pw === null) return zipProblem(zipName, new ZipError('need-password', 'The archive is encrypted and its password is not "infected".'), [h('button', { type: 'button', class: 'copy', onclick: () => openZip(zipName, bytes) }, 'Enter password…')]);
+    try { if (checkPassword(bytes, locked, pw)) password = pw; else prompt = 'That password did not work. Try again.'; }
+    catch (e) { return zipProblem(zipName, e); }
+  }
+  busy(`Looking inside ${zipName}…`);
+  await tick();
+  let items;
+  try { items = classifyEntries(bytes, files, password); } catch (e) { return zipProblem(zipName, e); }
+  const zip = { name: zipName, bytes, items, password };
+  const exes = items.filter((i) => i.kind === 'pe' || i.kind === 'mz');
+  if (exes.length === 1) return openEntry(zip, exes[0].entry);
+  if (items.every((i) => i.kind === 'error')) return zipProblem(zipName, items[0].error); // nothing usable: say why plainly
+  showZipPicker(zip);
+}
+function showZipPicker(zip) {
+  load.token = {};
+  const exes = zip.items.filter((i) => i.kind === 'pe' || i.kind === 'mz');
+  const kindChip = (i) => i.kind === 'pe' ? chip('PE', 'info') : i.kind === 'mz' ? chip('MZ header', 'info') : i.kind === 'error' ? chip(i.error.message, 'medium') : chip('not an executable');
+  const rows = [...exes, ...zip.items.filter((i) => !exes.includes(i))].map((i) => h('tr', { class: i.kind === 'error' ? 'muted' : '' },
+    h('td', { class: 'mono wrap' }, i.entry.displayName), h('td', { class: 'num' }, fmtSize(i.entry.size)), h('td', i.entry.encryption === 'none' ? '—' : i.entry.encryption), h('td', kindChip(i)),
+    h('td', h('button', { type: 'button', class: 'copy', disabled: i.kind === 'error', onclick: () => openEntry(zip, i.entry) }, exes.includes(i) ? 'Open' : 'Open anyway'))));
+  const lead = exes.length > 1 ? `${exes.length} Windows executables in this archive. Pick one to analyze.`
+    : 'No Windows executable (MZ header) in this archive. You can still open a file; Peek will report what it finds.';
+  content.replaceChildren(h('section', { class: 'block', id: 'zip' }, h('h2', zip.name, h('span', { class: 'sub' }, `ZIP archive · ${zip.items.length} file${zip.items.length === 1 ? '' : 's'}${zip.password ? ` · password "${zip.password}"` : ''}`)),
+    h('p', lead),
+    h('div', { class: 'table-wrap' }, h('table', h('thead', h('tr', h('th', 'Name'), h('th', 'Size'), h('th', 'Encryption'), h('th', 'Looks like'), h('th', ''))), h('tbody', rows)))));
+  toc.hidden = true;
+  $('#exportBtn').disabled = true; $('#caseBtn').disabled = true; $('#hexesBtn').disabled = true;
+}
+async function openEntry(zip, entry) {
+  busy(`Extracting ${entry.displayName} from ${zip.name} (${fmtSize(entry.size)})…`);
+  await tick();
+  const back = zip.items.length > 1 ? [h('button', { type: 'button', class: 'copy', onclick: () => showZipPicker(zip) }, 'Back to the file list')] : [];
+  let data;
+  for (;;) {
+    try { data = extractEntry(zip.bytes, entry, { password: zip.password }); break; }
+    catch (e) {
+      if (!(e instanceof ZipError) || (e.code !== 'bad-password' && e.code !== 'need-password')) return zipProblem(zip.name, e, back);
+      // This entry has a different password from the one that opened the archive.
+      const pw = await askPassword(zip.name, `${entry.displayName} needs a different password.`);
+      if (pw === null) return zipProblem(zip.name, e, back);
+      zip.password = pw;
+    }
+  }
+  load(baseName(entry.name), data, { archive: zip.name, path: entry.displayName, encryption: entry.encryption, password: entry.encrypted ? zip.password : null, zip: zip.items.length > 1 ? zip : null });
+}
+
 // ---------- rendering ----------
 function render() {
   const { name, size, pe, analysis: a } = current;
@@ -110,6 +204,10 @@ function render() {
   // Summary
   const s = a.summary;
   const summary = sec('summary', name, `${fmtSize(size)} · ${size} bytes`);
+  const o = current.origin;
+  if (o) summary.append(h('div', { class: 'card origin' }, chip('from ZIP', 'info'), ' Extracted in the browser from ', mono(o.archive), ', entry ', mono(o.path),
+    o.encryption !== 'none' ? ` (${o.encryption}${o.password ? `, password "${o.password}"` : ''})` : ' (not encrypted)', '. Hashes, findings and hand-offs are for the extracted file.',
+    o.zip ? [' ', h('button', { type: 'button', class: 'copy', onclick: () => showZipPicker(o.zip) }, 'Other files in this ZIP')] : null));
   if (pe.errors.length) summary.append(h('div', { class: 'card' }, pe.errors.map((e) => h('p', chip('error', 'high'), ' ', e))));
   if (s) {
     const posture = [
@@ -323,9 +421,9 @@ function drawImports(list, dlls, q) {
 }
 
 function exportJson() {
-  const { name, pe, analysis } = current;
+  const { name, pe, analysis, origin } = current;
   const { findings, notableImports, counts, summary, packerHint } = analysis;
-  return JSON.stringify({ file: name, generator: `peek ${VERSION}`, note: 'Findings are observations, not verdicts. Signature data is presence and names only; the certificate chain and file hash were not verified.', ...toJSON(pe), analysis: { counts, packerHint, summary, findings, notableImports } }, null, 2);
+  return JSON.stringify({ file: name, ...(origin ? { extractedFrom: { archive: origin.archive, entry: origin.path, encryption: origin.encryption } } : {}), generator: `peek ${VERSION}`, note: 'Findings are observations, not verdicts. Signature data is presence and names only; the certificate chain and file hash were not verified.', ...toJSON(pe), analysis: { counts, packerHint, summary, findings, notableImports } }, null, 2);
 }
 function downloadJson() {
   const blob = new Blob([exportJson()], { type: 'application/json' });
@@ -359,8 +457,8 @@ function openVia(promise) {
 function sendToTessera() {
   const S = suite();
   if (!S || !current) return;
-  const { name, size, pe, analysis } = current;
-  openVia(S.send('peek', 'tessera', { kind: 'case', name: name.replace(/\.[^.]*$/, ''), data: JSON.stringify(caseItems({ name, size, pe, analysis })) }));
+  const { name, size, pe, analysis, origin } = current;
+  openVia(S.send('peek', 'tessera', { kind: 'case', name: name.replace(/\.[^.]*$/, ''), data: JSON.stringify(caseItems({ name, size, pe, analysis, origin })) }));
 }
 function sendToHexes() {
   const S = suite();
@@ -384,7 +482,7 @@ function initSuite() {
     const from = q.get('from');
     if (from) {
       S.receive('peek', from, { maxBytes: 256 << 20 })
-        .then((h) => { if (h) { showToast(`Received ${fmtSize(h.bytes.length)} from ${h.fromName}`); load(h.name, h.bytes); } })
+        .then((h) => { if (h) { showToast(`Received ${fmtSize(h.bytes.length)} from ${h.fromName}`); openBytes(h.name, h.bytes); } })
         .catch((e) => showToast('Could not load the hand-off: ' + e.message));
       return;
     }
@@ -401,7 +499,7 @@ async function loadSrc(src) {
   try {
     const r = await fetch(src);
     if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
-    load(decodeURIComponent(src.split('/').pop()) || 'file', new Uint8Array(await r.arrayBuffer()));
+    openBytes(decodeURIComponent(src.split('/').pop()) || 'file', new Uint8Array(await r.arrayBuffer()));
   } catch (e) { showToast('Could not open ' + src + ': ' + e.message); }
 }
 if (/^https?:$/.test(location.protocol)) {
@@ -415,6 +513,7 @@ if (/^https?:$/.test(location.protocol)) {
 // ---------- wiring ----------
 $('h1').append(h('span', { class: 'ver', title: 'Peek version' }, 'v' + VERSION));
 $('#helpClose').addEventListener('click', () => $('#help').close());
+$('#zipPwCancel').addEventListener('click', () => $('#zipPw').close());
 $('#fileInput').addEventListener('change', (e) => { if (e.target.files[0]) loadFile(e.target.files[0]); e.target.value = ''; });
 $('#sampleBtn').addEventListener('click', loadSample);
 $('#caseBtn').addEventListener('click', sendToTessera);

@@ -177,3 +177,9 @@ dialog kbd { font-family: var(--mono); background: var(--surface-2); border: 1px
 dialog ul { padding-left: 20px; }
 .toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--header-bg); color: var(--header-text); padding: 8px 14px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity 0.2s; pointer-events: none; }
 .toast.show { opacity: 1; }
+
+/* ZIP archives */
+.card.origin { margin-bottom: 12px; overflow-wrap: anywhere; }
+.card.zip-problem p { margin: 6px 0; }
+#zipPw input { width: 100%; font: inherit; font-family: var(--mono); padding: 6px 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface-2); color: var(--text); }
+#zipPw .dialog-buttons { display: flex; gap: 8px; justify-content: flex-end; }
